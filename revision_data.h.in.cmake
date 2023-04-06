@@ -9,10 +9,10 @@
  #define _SOURCE_DIRECTORY          R"(@CMAKE_SOURCE_DIR@)"
  #define _BUILD_DIRECTORY           R"(@BUILDDIR@)"
  #define _MYSQL_EXECUTABLE          R"(@MYSQL_EXECUTABLE@)"
- #define _FULL_DATABASE             "NC_7.3.5"
- #define _HOTFIXES_DATABASE         "NC735_hotfixes"
- #define VER_COMPANYNAME_STR        "NordrassilCore Developers"
- #define VER_LEGALCOPYRIGHT_STR     "(c)2020 NordrassilCore"
+ #define _FULL_DATABASE             "LA_7.3.5"
+ #define _HOTFIXES_DATABASE         "LA735_hotfixes"
+ #define VER_COMPANYNAME_STR        "lEGENDS OF AZEROTH Developers"
+ #define VER_LEGALCOPYRIGHT_STR     "(c)2023 lEGENDS OF AZEROTH"
  #define VER_FILEVERSION            0,0,0
  #define VER_FILEVERSION_STR        "@rev_hash@ @rev_date@ (@rev_branch@ branch)"
  #define VER_PRODUCTVERSION         VER_FILEVERSION
