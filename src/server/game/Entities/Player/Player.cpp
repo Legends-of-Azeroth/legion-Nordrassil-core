@@ -47,6 +47,7 @@
 #include "CombatPackets.h"
 #include "Common.h"
 #include "ConditionMgr.h"
+#include "Config.h"
 #include "CreatureAI.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
@@ -278,6 +279,9 @@ m_achievementMgr(sf::safe_ptr<AchievementMgr<Player>>(this))
         m_bgBattlegroundQueueID[j].invitedToInstance = 0;
         m_bgBattlegroundQueueID[j].joinTime = 0;
     }
+	// PlayedTimeReward
+    ptr_Interval = sConfigMgr->GetIntDefault("PlayedTimeReward.Interval", 0);
+    ptr_Money = sConfigMgr->GetIntDefault("PlayedTimeReward.Money", 0);
 
     m_createdtime = time(NULL);
     m_logintime = time(NULL);
@@ -1524,6 +1528,19 @@ void Player::Update(uint32 p_time)
         if (Unit* charmer = GetCharmer())
             if (charmer->IsCreature() && charmer->isAlive())
                 UpdateCharmedAI();
+
+	// PlayedTimeReward
+    if (ptr_Interval > 0)
+    {
+        if (ptr_Interval <= p_time)
+        {
+            ChatHandler(GetSession()).PSendSysMessage("[PlayedTimeReward] :: You earned rewards for staying online.");								   
+            ModifyMoney(ptr_Money);
+            ptr_Interval = sConfigMgr->GetIntDefault("PlayedTimeReward.Interval", 0);
+        }
+        else
+            ptr_Interval -= p_time;
+    }
 
     if (!m_timedquests.empty())
     {
@@ -14309,7 +14326,13 @@ InventoryResult Player::CanStoreItem(uint8 bag, uint8 slot, ItemPosCountVec &des
     }*/ // it doesn't work that way!
 
     // search free slot
-    res = CanStoreItem_InInventorySlots(INVENTORY_SLOT_ITEM_START, GetInventoryEndSlot(), dest, pProto, count, false, pItem, bag, slot);
+      uint8 searchSlotStart = INVENTORY_SLOT_ITEM_START;
+    // new bags can be directly equipped
+    if (!pItem && pProto->GetClass() == ITEM_CLASS_CONTAINER && pProto->GetSubClass() == ITEM_SUBCLASS_CONTAINER &&
+        (pProto->GetBonding() == NO_BIND || pProto->GetBonding() == BIND_WHEN_PICKED_UP))
+        searchSlotStart = INVENTORY_SLOT_BAG_START;
+
+    res = CanStoreItem_InInventorySlots(searchSlotStart, INVENTORY_SLOT_ITEM_END, dest, pProto, count, false, pItem, bag, slot);
     if (res != EQUIP_ERR_OK)
     {
         if (no_space_count)
@@ -16818,7 +16841,8 @@ void Player::SplitItem(uint16 src, uint16 dst, uint32 count)
 
 void Player::SwapItem(uint16 src, uint16 dst)
 {
-    if (!IsInWorld())
+    // If we want to swap the same item it is useless.
+    if (src == dst)
         return;
 
     uint8 srcbag = src >> 8;
@@ -16853,19 +16877,19 @@ void Player::SwapItem(uint16 src, uint16 dst)
             }
         }
     }
-    // else if (pDstItem && pDstItem->HasFlag(ITEM_FIELD_DYNAMIC_FLAGS, ITEM_FLAG_CHILD))
-    // {
-        // if (Item* parentItem = GetItemByGuid(pDstItem->GetGuidValue(ITEM_FIELD_CREATOR)))
-        // {
-            // if (IsEquipmentPos(dst))
-            // {
-                // AutoUnequipChildItem(parentItem);   // we need to unequip child first since it cannot go into whatever is going to happen next
-                // SwapItem(src, dst);                 // dst is now empty
-                // SwapItem(parentItem->GetPos(), src);// src is now empty
-                // return;
-            // }
-        // }
-    // }
+    else if (pDstItem && pDstItem->HasFlag(ITEM_FIELD_DYNAMIC_FLAGS, ITEM_FLAG_CHILD))
+    {
+        if (Item* parentItem = GetItemByGuid(pDstItem->GetGuidValue(ITEM_FIELD_CREATOR)))
+        {
+            if (IsEquipmentPos(dst))
+            {
+                AutoUnequipChildItem(parentItem);   // we need to unequip child first since it cannot go into whatever is going to happen next
+                SwapItem(src, dst);                 // dst is now empty
+                SwapItem(parentItem->GetPos(), src);// src is now empty
+                return;
+            }
+        }
+    }
 
     TC_LOG_DEBUG(LOG_FILTER_PLAYER_ITEMS, "STORAGE: SwapItem bag = %u, slot = %u, item = %u", dstbag, dstslot, pSrcItem->GetEntry());
 
@@ -30408,10 +30432,6 @@ void Player::learnQuestRewardedSpells()
 
 void Player::learnSkillRewardedSpells(uint32 skillId, uint32 skillValue)
 {
-    // bad hack to work around data being suited only for the client - AcquireMethod == SKILL_LINE_ABILITY_LEARNED_ON_SKILL_LEARN for riding client uses it to show riding in spellbook as trainable
-    if (skillId == SKILL_RIDING)
-        return;
-
     uint64 raceMask  = getRaceMask();
     uint32 classMask = getClassMask();
     for (SkillLineAbilityEntry const* ability : sDB2Manager._skillLineAbilityContainer[skillId])
@@ -30426,6 +30446,10 @@ void Player::learnSkillRewardedSpells(uint32 skillId, uint32 skillValue)
         if (ability->AcquireMethod != SKILL_LINE_ABILITY_LEARNED_ON_SKILL_VALUE && ability->AcquireMethod != SKILL_LINE_ABILITY_LEARNED_ON_SKILL_LEARN && ability->AcquireMethod != SKILL_LINE_ABILITY_NOT_AUTO_LEARN)
             continue;
 
+        // AcquireMethod == 2 && NumSkillUps == 1 --> automatically learn riding skill spell, else we skip it (client shows riding in spellbook as trainable).
+        if (skillId == SKILL_RIDING && (ability->AcquireMethod != SKILL_LINE_ABILITY_LEARNED_ON_SKILL_LEARN || ability->NumSkillUps != 1))
+            continue;
+		
         if (ability->AcquireMethod == SKILL_LINE_ABILITY_NOT_AUTO_LEARN)
         {
             //First Aid in Draenor don't learning misc spells
@@ -39514,4 +39538,71 @@ std::string Player::GetShortDescription() const
     std::stringstream oss;
     oss << GetName() << ":" << GetGUIDLow() << ":" << GetSession()->GetAccountId() << "@" << GetSession()->GetRemoteAddress().c_str() << "]";
     return oss.str();
+}
+
+
+void Player::ApplyOnBagsItems(std::function<bool(Player*, Item*, uint8 /*bag*/, uint8 /*slot*/)>&& function)
+{
+    for (uint32 i = INVENTORY_SLOT_ITEM_START; i < INVENTORY_SLOT_ITEM_END; ++i)
+    {
+        if (Item* item = GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+        {
+            if (!function(this, item, INVENTORY_SLOT_BAG_0, i))
+                return;
+        }
+    }
+
+    for (uint32 i = INVENTORY_SLOT_BAG_START; i < INVENTORY_SLOT_BAG_END; ++i)
+    {
+        if (Bag* bag = (Bag*)GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+        {
+            for (uint32 j = 0; j < bag->GetBagSize(); ++j)
+            {
+                if (Item* item = GetItemByPos(i, j))
+                {
+                    if (!function(this, item, i, j))
+                        return;
+                }
+            }
+        }
+    }
+}
+
+void Player::ApplyOnBankItems(std::function<bool(Player*, Item*, uint8 /*bag*/, uint8 /*slot*/)>&& function)
+{
+    for (uint32 i = BANK_SLOT_ITEM_START; i < BANK_SLOT_ITEM_END; ++i)
+    {
+        if (Item* item = GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+        {
+            if (!function(this, item, INVENTORY_SLOT_BAG_0, i))
+                return;
+        }
+    }
+
+    for (uint32 i = BANK_SLOT_BAG_START; i < BANK_SLOT_BAG_END; ++i)
+    {
+        if (Bag* bag = (Bag*)GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+        {
+            for (uint32 j = 0; j < bag->GetBagSize(); ++j)
+            {
+                if (Item* item = GetItemByPos(i, j))
+                {
+                    if (!function(this, item, i, j))
+                        return;
+                }
+            }
+        }
+    }
+}
+
+void Player::ApplyOnReagentBankItems(std::function<bool(Player*, Item*, uint8 /*bag*/, uint8 /*slot*/)>&& function)
+{
+    for (uint32 i = REAGENT_SLOT_START; i < REAGENT_SLOT_END; ++i)
+    {
+        if (Item* item = GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+        {
+            if (!function(this, item, INVENTORY_SLOT_BAG_0, i))
+                return;
+        }
+    }
 }

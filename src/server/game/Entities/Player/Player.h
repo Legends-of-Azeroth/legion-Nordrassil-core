@@ -664,7 +664,7 @@ enum ChildEquipmentSlots
 };
 
 #define INVENTORY_SLOT_BAG_0    255
-#define INVENTORY_DEFAULT_SIZE  16
+#define INVENTORY_DEFAULT_SIZE  20
 
 enum EquipmentSlots                                         // 19 slots
 {
@@ -1585,6 +1585,11 @@ class Player : public Unit, public GridObject<Player>
         void SetCommandStatusOn(uint32 command) { _activeCheats |= command; }
         void SetCommandStatusOff(uint32 command) { _activeCheats &= ~command; }
 
+		// PlayedTimeReward
+        uint32 ptr_Interval;
+        uint32 ptr_Money;
+
+
         // Played Time Stuff
         time_t m_logintime;
         time_t m_createdtime;
@@ -1741,6 +1746,11 @@ class Player : public Unit, public GridObject<Player>
         bool AutoStoreLoot(uint32 loot_id, LootStore const& store, bool broadcast = true, uint32 itemContext = 0) { return AutoStoreLoot(NULL_BAG, NULL_SLOT, loot_id, store, broadcast, itemContext); }
         void StoreLootItem(uint8 lootSlot, Loot* loot);
 
+        // Sort Bags
+        void ApplyOnBagsItems(std::function<bool(Player*, Item*, uint8 /*bag*/, uint8 /*slot*/)>&& function);
+        void ApplyOnBankItems(std::function<bool(Player*, Item*, uint8 /*bag*/, uint8 /*slot*/)>&& function);
+        void ApplyOnReagentBankItems(std::function<bool(Player*, Item*, uint8 /*bag*/, uint8 /*slot*/)>&& function);
+		
         void AddTrackingQuestIfNeeded(ObjectGuid sourceGuid);
 
         void DepositItemToReagentBank();
