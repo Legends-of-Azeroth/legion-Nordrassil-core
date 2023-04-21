@@ -171,13 +171,4 @@ INSERT INTO `waypoint_data` (`id`, `point`, `position_x`, `position_y`, `positio
 (265219, 33, -8706.55, 599.998, 99.2008, 0, 0, 0, 0, 100, 0, 52358),
 (265219, 34, -8724.08, 582.176, 97.8885, 0, 0, 0, 0, 100, 0, 52358);
 
-DELETE FROM `vehicle_template_accessory` WHERE `EntryOrAura` = 52358 AND `accessory_entry` = 52359;
-DELETE FROM `vehicle_template_accessory` WHERE `EntryOrAura` = 52359 AND `accessory_entry` = 52361;
-INSERT INTO `vehicle_template_accessory` (`EntryOrAura`, `accessory_entry`, `seat_id`, `minion`, `description`, `summontype`, `summontimer`) VALUES
-(52358, 52359, 0, 1, "Craggle Wobbletop - Toy Cart", 8, 0),
-(52359, 52361, 0, 1, "Toy Cart - Toy Cart Bunny", 8, 0);
-
-DELETE FROM `npc_spellclick_spells` WHERE `npc_entry` IN (52358, 52359);
-INSERT INTO `npc_spellclick_spells` (`npc_entry`, `spell_id`, `cast_flags`, `user_type`) VALUES
-(52358, 46598, 0, 0),
-(52359, 46598, 0, 0);
+UPDATE `world`.`creature_template` SET `flags_extra`=128 WHERE  `entry`=52361;
